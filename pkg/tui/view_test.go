@@ -90,30 +90,6 @@ func TestSidebarAndSorting(t *testing.T) {
 	}
 }
 
-func TestMonochromeMode(t *testing.T) {
-	root := tree.NewDirectory("testroot")
-	c1 := tree.NewEntry("main.go", tree.File, 1024)
-	root.Children = append(root.Children, c1)
-	tree.Aggregate(root, tree.Bytes)
-
-	app := NewApp("/tmp/testroot", root, tree.Bytes, 3)
-	app.Monochrome = true
-
-	frame := string(app.RenderFrame(80, 24))
-	if !strings.Contains(frame, "treedisk") {
-		t.Errorf("monochrome frame missing title")
-	}
-	if strings.Contains(frame, HighlightBg) {
-		t.Errorf("monochrome frame should not contain 256-color HighlightBg")
-	}
-
-	// Toggle monochrome with 't'
-	app.HandleEvent(Event{Type: KeyChar, Char: 't'})
-	if app.Monochrome {
-		t.Errorf("expected Monochrome to be false after 't' toggle")
-	}
-}
-
 func TestPaneFocusAndKeyboardNav(t *testing.T) {
 	root := tree.NewDirectory("testroot")
 	d1 := tree.NewDirectory("subdir")

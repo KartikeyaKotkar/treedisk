@@ -168,7 +168,6 @@ type App struct {
 	SidebarSelected int
 	SidebarScroll   int
 	SidebarItems    []*tree.Node
-	Monochrome      bool
 }
 
 func NewApp(rootPath string, rootNode *tree.Node, metric tree.Metric, depth uint32) *App {
@@ -193,7 +192,6 @@ func NewApp(rootPath string, rootNode *tree.Node, metric tree.Metric, depth uint
 		SidebarSort:     SortSize,
 		SidebarSelected: 0,
 		SidebarScroll:   0,
-		Monochrome:      false,
 	}
 	app.refreshSidebar()
 	return app
@@ -333,11 +331,7 @@ func (a *App) RenderFrame(cols, rows int) []byte {
 
 	// Header Line 0: Breadcrumb trail
 	trail := a.buildTrail()
-	titleFg := HighlightBorder
-	if a.Monochrome {
-		titleFg = FgBrightWhite + Bold
-	}
-	sb.DrawString(1, 0, "treedisk", titleFg, Reset, true)
+	sb.DrawString(1, 0, "treedisk", HighlightBorder, Reset, true)
 	sb.DrawString(10, 0, "· "+trail, FgBrightWhite, Reset, false)
 
 	// Header Line 1: Summary metrics
@@ -351,11 +345,7 @@ func (a *App) RenderFrame(cols, rows int) []byte {
 	if a.FilterResult != nil {
 		summary += fmt.Sprintf(" | Filter: %q (%d matches)", a.SearchQuery, a.FilterResult.Count)
 	}
-	summaryFg := FgYellow
-	if a.Monochrome {
-		summaryFg = FgBrightWhite
-	}
-	sb.DrawString(1, 1, summary, summaryFg, Reset, false)
+	sb.DrawString(1, 1, summary, FgYellow, Reset, false)
 
 	// Treemap area calculation
 	mapOffsetY := 2
@@ -419,15 +409,10 @@ func (a *App) RenderFrame(cols, rows int) []byte {
 			reclaim = targetNode.Reclaim
 		}
 
-		fg := CategoryColor(cat, a.Monochrome)
-		bg := CategoryBg(cat, a.Monochrome)
-		borderFg := BorderColor(isSelected, a.Monochrome)
+		fg := CategoryColor(cat)
+		bg := CategoryBg(cat)
 		if isSelected {
-			if a.Monochrome {
-				bg = BgBlack
-			} else {
-				bg = HighlightBg
-			}
+			bg = HighlightBg
 		}
 
 		_, isMarked := a.Marks[targetPath]
@@ -441,7 +426,7 @@ func (a *App) RenderFrame(cols, rows int) []byte {
 						ch = '░'
 					}
 					if isSelected {
-						sb.Set(x, y, ch, borderFg, bg, true)
+						sb.Set(x, y, ch, HighlightBorder, HighlightBg, true)
 					} else {
 						sb.Set(x, y, ch, fg, bg, false)
 					}
@@ -470,7 +455,7 @@ func (a *App) RenderFrame(cols, rows int) []byte {
 						} else {
 							ch = '║'
 						}
-						sb.Set(x, y, ch, borderFg, bg, true)
+						sb.Set(x, y, ch, HighlightBorder, bg, true)
 					} else {
 						if x == x0 && y == y0 {
 							ch = '┌'
@@ -485,7 +470,7 @@ func (a *App) RenderFrame(cols, rows int) []byte {
 						} else {
 							ch = '│'
 						}
-						sb.Set(x, y, ch, borderFg, bg, false)
+						sb.Set(x, y, ch, fg, bg, false)
 					}
 				} else {
 					ch := ' '
@@ -509,8 +494,6 @@ func (a *App) RenderFrame(cols, rows int) []byte {
 		titleColor := FgBrightWhite
 		if isMarked {
 			titleColor = FgBrightRed
-		} else if isSelected && a.Monochrome {
-			titleColor = FgBrightWhite + Bold
 		}
 
 		sb.DrawString(x0+1, y0+1, title, titleColor, bg, isSelected)
@@ -524,11 +507,7 @@ func (a *App) RenderFrame(cols, rows int) []byte {
 				sizeStr = size.HumanBytesShort(targetNode.Bytes)
 			}
 			if utf8.RuneCountInString(sizeStr) <= interiorW {
-				sizeFg := FgBrightYellow
-				if a.Monochrome {
-					sizeFg = FgGray
-				}
-				sb.DrawString(x0+1, y0+2, sizeStr, sizeFg, bg, false)
+				sb.DrawString(x0+1, y0+2, sizeStr, FgBrightYellow, bg, false)
 			}
 		}
 	}
@@ -566,11 +545,7 @@ func (a *App) RenderFrame(cols, rows int) []byte {
 			volBar += fmt.Sprintf(" -> %s free after marked", size.HumanBytes(proj.Available))
 		}
 	}
-	volFg := FgBrightCyan
-	if a.Monochrome {
-		volFg = FgBrightWhite
-	}
-	sb.DrawString(1, footY, volBar, volFg, Reset, false)
+	sb.DrawString(1, footY, volBar, FgBrightCyan, Reset, false)
 
 	// Footer 2: Current selection detail & rich stats
 	selDetail := "Selected: none"
@@ -606,12 +581,8 @@ func (a *App) RenderFrame(cols, rows int) []byte {
 	} else if a.StatusMsg != "" {
 		sb.DrawString(1, footY+2, a.StatusMsg, FgBrightRed, Reset, true)
 	} else {
-		keys := "[Space] Mark  [Enter] Open  [Tab] Pane  [s] Sidebar  [t] Mono  [m] Metric  [/] Filter  [?] Help"
-		keysFg := FgYellow
-		if a.Monochrome {
-			keysFg = FgGray
-		}
-		sb.DrawString(1, footY+2, keys, keysFg, Reset, false)
+		keys := "[Space] Mark  [Enter] Open  [Tab] Pane  [s] Sidebar  [m] Metric  [/] Filter  [?] Help  [q] Quit"
+		sb.DrawString(1, footY+2, keys, FgYellow, Reset, false)
 	}
 
 	// Render modal screens if active
@@ -627,10 +598,10 @@ func (a *App) RenderFrame(cols, rows int) []byte {
 func (a *App) renderSidebar(sb *ScreenBuffer, startX, startY, width, height int) {
 	divX := startX - 1
 	dividerCh := '│'
-	divFg := BorderColor(false, a.Monochrome)
+	divFg := FgCyan
 	if a.Focus == FocusSidebar {
 		dividerCh = '║'
-		divFg = BorderColor(true, a.Monochrome)
+		divFg = HighlightBorder
 	}
 	for y := startY; y < startY+height && y < sb.Height; y++ {
 		sb.Set(divX, y, dividerCh, divFg, Reset, false)
@@ -639,11 +610,7 @@ func (a *App) renderSidebar(sb *ScreenBuffer, startX, startY, width, height int)
 	header := fmt.Sprintf("Contents · [%s]", a.SidebarSort.Label())
 	headerFg := FgBrightWhite
 	if a.Focus == FocusSidebar {
-		if a.Monochrome {
-			headerFg = FgBrightWhite + Bold
-		} else {
-			headerFg = HighlightBorder
-		}
+		headerFg = HighlightBorder
 	}
 	sb.DrawString(startX+1, startY, header, headerFg, Reset, true)
 
@@ -724,26 +691,17 @@ func (a *App) renderSidebar(sb *ScreenBuffer, startX, startY, width, height int)
 		rowBg := Reset
 		if isMarked {
 			rowFg = FgBrightRed
-		} else if a.Monochrome {
-			if isSelected && a.Focus == FocusSidebar {
-				rowFg = FgBlack
-				rowBg = BgWhite
-			} else {
-				rowFg = FgBrightWhite
-			}
+		} else if isSelected && a.Focus == FocusSidebar {
+			rowFg = FgBrightWhite
+			rowBg = HighlightBg
 		} else {
-			if isSelected && a.Focus == FocusSidebar {
-				rowFg = FgBrightWhite
-				rowBg = HighlightBg
-			} else {
-				rowFg = CategoryColor(item.Category, false)
-			}
+			rowFg = CategoryColor(item.Category)
 		}
 
 		sb.DrawString(startX+1, y, rowStr, rowFg, rowBg, isSelected && a.Focus == FocusSidebar)
 	}
 
-	hint := "Tab:Focus  S/N/C:Sort"
+	hint := "Tab:Focus  S/N/F/R:Sort"
 	if a.Focus == FocusSidebar {
 		hint = "Enter:Open  Space:Mark"
 	}
@@ -829,8 +787,7 @@ func (a *App) drawHelpModal(sb *ScreenBuffer, cols, rows int) {
 		"Arrows / h j k l : Navigate in focused pane",
 		"Tab              : Switch focus (Treemap / Contents Sidebar)",
 		"s                : Toggle Contents Sidebar",
-		"S / N / C / R    : Sort sidebar (Size / Name / Count / Reclaim)",
-		"t                : Toggle Minimal Monochrome theme",
+		"S / N / F / R    : Sort sidebar (Size / Name / Files / Reclaim)",
 		"Space            : Mark / unmark selected file or folder",
 		"Enter            : Zoom into directory",
 		"Backspace / u    : Go up to parent directory",
@@ -1005,8 +962,6 @@ func (a *App) HandleEvent(ev Event) {
 			}
 		case 's':
 			a.SidebarOpen = !a.SidebarOpen
-		case 't', 'T':
-			a.Monochrome = !a.Monochrome
 		case 'S':
 			a.SidebarSort = SortSize
 			a.refreshSidebar()

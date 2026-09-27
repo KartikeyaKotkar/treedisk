@@ -48,10 +48,7 @@ const (
 )
 
 // CategoryColor returns ANSI escape code for tile foreground according to its kind.
-func CategoryColor(cat tree.Category, mono bool) string {
-	if mono {
-		return FgBrightWhite
-	}
+func CategoryColor(cat tree.Category) string {
 	switch cat {
 	case tree.Code:
 		return "\x1b[38;5;75m" // Blue
@@ -75,10 +72,7 @@ func CategoryColor(cat tree.Category, mono bool) string {
 }
 
 // CategoryBg returns subtle dark background tint for tile.
-func CategoryBg(cat tree.Category, mono bool) string {
-	if mono {
-		return Reset
-	}
+func CategoryBg(cat tree.Category) string {
 	switch cat {
 	case tree.Code:
 		return "\x1b[48;5;235m"
@@ -99,18 +93,4 @@ func CategoryBg(cat tree.Category, mono bool) string {
 	default:
 		return "\x1b[48;5;234m"
 	}
-}
-
-// BorderColor returns the appropriate border styling.
-func BorderColor(selected bool, mono bool) string {
-	if mono {
-		if selected {
-			return FgBrightWhite + Bold
-		}
-		return FgGray
-	}
-	if selected {
-		return HighlightBorder
-	}
-	return FgCyan
 }

@@ -1,6 +1,10 @@
 # treedisk
 
+![treedisk in action](assets/screenshot.png)
+
 An ultra-fast interactive terminal disk-usage explorer with squarified treemaps, sortable contents sidebar, and safe space reclaim. Written in pure Go.
+
+*Above: treedisk scanning a project — `.git` objects, `assets`, and `crates` laid out as a squarified treemap with the contents sidebar.*
 
 ```
  treedisk · /home/user/workspace

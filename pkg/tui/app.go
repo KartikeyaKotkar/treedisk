@@ -2,6 +2,14 @@ package tui
 
 import (
 	"bytes"
+	"cmp"
+	"fmt"
+	"os"
+	"path/filepath"
+	"slices"
+	"strings"
+	"unicode/utf8"
+
 	"github.com/KartikeyaKotkar/treedisk/pkg/export"
 	"github.com/KartikeyaKotkar/treedisk/pkg/filter"
 	"github.com/KartikeyaKotkar/treedisk/pkg/removal"
@@ -9,11 +17,6 @@ import (
 	"github.com/KartikeyaKotkar/treedisk/pkg/space"
 	"github.com/KartikeyaKotkar/treedisk/pkg/tree"
 	"github.com/KartikeyaKotkar/treedisk/pkg/treemap"
-	"fmt"
-	"os"
-	"path/filepath"
-	"strings"
-	"unicode/utf8"
 )
 
 type Cell struct {
@@ -109,44 +112,176 @@ const (
 	ModeSearch
 )
 
+type FocusPane uint8
+
+const (
+	FocusTreemap FocusPane = iota
+	FocusSidebar
+)
+
+type SortKey uint8
+
+const (
+	SortSize SortKey = iota
+	SortName
+	SortCount
+	SortReclaim
+)
+
+func (s SortKey) Label() string {
+	switch s {
+	case SortSize:
+		return "Size"
+	case SortName:
+		return "Name"
+	case SortCount:
+		return "Files"
+	case SortReclaim:
+		return "Reclaim"
+	default:
+		return "Size"
+	}
+}
+
 // App is the interactive terminal treemap application.
 type App struct {
-	Term         *Terminal
-	RootPath     string
-	RootNode     *tree.Node
-	CurrentNode  *tree.Node
-	Crumbs       []int
-	SelectedTile int
-	Tiles        []treemap.Tile
-	Marks        map[string]removal.Target
-	Metric       tree.Metric
-	Depth        uint32
-	SearchQuery  string
-	FilterResult *filter.Matches
-	Mode         Mode
-	SpaceInfo    space.SpaceInfo
-	DeviceName   string
-	StatusMsg    string
-	Running      bool
+	Term            *Terminal
+	RootPath        string
+	RootNode        *tree.Node
+	CurrentNode     *tree.Node
+	Crumbs          []int
+	SelectedTile    int
+	Tiles           []treemap.Tile
+	Marks           map[string]removal.Target
+	Metric          tree.Metric
+	Depth           uint32
+	SearchQuery     string
+	FilterResult    *filter.Matches
+	Mode            Mode
+	SpaceInfo       space.SpaceInfo
+	DeviceName      string
+	StatusMsg       string
+	Running         bool
+	Focus           FocusPane
+	SidebarOpen     bool
+	SidebarSort     SortKey
+	SidebarSelected int
+	SidebarScroll   int
+	SidebarItems    []*tree.Node
+	Monochrome      bool
 }
 
 func NewApp(rootPath string, rootNode *tree.Node, metric tree.Metric, depth uint32) *App {
 	sp, _ := space.GetSpaceInfo(rootPath)
 	dev := space.DeviceFor(rootPath)
 
-	return &App{
-		RootPath:     rootPath,
-		RootNode:     rootNode,
-		CurrentNode:  rootNode,
-		Crumbs:       nil,
-		SelectedTile: 0,
-		Marks:        make(map[string]removal.Target),
-		Metric:       metric,
-		Depth:        depth,
-		Mode:         ModeNormal,
-		SpaceInfo:    sp,
-		DeviceName:   dev,
-		Running:      true,
+	app := &App{
+		RootPath:        rootPath,
+		RootNode:        rootNode,
+		CurrentNode:     rootNode,
+		Crumbs:          nil,
+		SelectedTile:    0,
+		Marks:           make(map[string]removal.Target),
+		Metric:          metric,
+		Depth:           depth,
+		Mode:            ModeNormal,
+		SpaceInfo:       sp,
+		DeviceName:      dev,
+		Running:         true,
+		Focus:           FocusTreemap,
+		SidebarOpen:     true,
+		SidebarSort:     SortSize,
+		SidebarSelected: 0,
+		SidebarScroll:   0,
+		Monochrome:      false,
+	}
+	app.refreshSidebar()
+	return app
+}
+
+func (a *App) refreshSidebar() {
+	if a.CurrentNode == nil {
+		a.SidebarItems = nil
+		return
+	}
+	items := make([]*tree.Node, len(a.CurrentNode.Children))
+	copy(items, a.CurrentNode.Children)
+
+	switch a.SidebarSort {
+	case SortSize:
+		slices.SortFunc(items, func(x, y *tree.Node) int {
+			if a.Metric == tree.Files {
+				return cmp.Compare(y.Files, x.Files)
+			}
+			return cmp.Compare(y.Bytes, x.Bytes)
+		})
+	case SortName:
+		slices.SortFunc(items, func(x, y *tree.Node) int {
+			return strings.Compare(strings.ToLower(x.Name), strings.ToLower(y.Name))
+		})
+	case SortCount:
+		slices.SortFunc(items, func(x, y *tree.Node) int {
+			return cmp.Compare(y.Files, x.Files)
+		})
+	case SortReclaim:
+		slices.SortFunc(items, func(x, y *tree.Node) int {
+			xr := x.Reclaim != tree.ReclaimNone
+			yr := y.Reclaim != tree.ReclaimNone
+			if xr && !yr {
+				return -1
+			}
+			if !xr && yr {
+				return 1
+			}
+			return cmp.Compare(y.Bytes, x.Bytes)
+		})
+	}
+	a.SidebarItems = items
+
+	if a.SidebarSelected >= len(items) {
+		a.SidebarSelected = len(items) - 1
+	}
+	if a.SidebarSelected < 0 && len(items) > 0 {
+		a.SidebarSelected = 0
+	}
+}
+
+func (a *App) syncSidebarWithTile() {
+	if a.SelectedTile < 0 || a.SelectedTile >= len(a.Tiles) || a.CurrentNode == nil {
+		return
+	}
+	t := a.Tiles[a.SelectedTile]
+	if len(t.Crumbs) == 0 || t.Kind == treemap.TileOthers {
+		return
+	}
+	childIdx := t.Crumbs[0]
+	if childIdx < 0 || childIdx >= len(a.CurrentNode.Children) {
+		return
+	}
+	targetChild := a.CurrentNode.Children[childIdx]
+	for idx, item := range a.SidebarItems {
+		if item == targetChild {
+			a.SidebarSelected = idx
+			break
+		}
+	}
+}
+
+func (a *App) syncTileWithSidebar() {
+	if a.SidebarSelected < 0 || a.SidebarSelected >= len(a.SidebarItems) || a.CurrentNode == nil {
+		return
+	}
+	selectedItem := a.SidebarItems[a.SidebarSelected]
+	for childIdx, child := range a.CurrentNode.Children {
+		if child == selectedItem {
+			for tileIdx, tile := range a.Tiles {
+				if len(tile.Crumbs) > 0 && tile.Crumbs[0] == childIdx {
+					a.SelectedTile = tileIdx
+					return
+				}
+			}
+			break
+		}
 	}
 }
 
@@ -159,6 +294,15 @@ func (a *App) ComputeLayout(cols, rows int) {
 		mapH = 4
 	}
 	mapW := cols
+	if a.SidebarOpen && cols >= 80 {
+		sideW := cols * 30 / 100
+		if sideW < 26 {
+			sideW = 26
+		} else if sideW > 38 {
+			sideW = 38
+		}
+		mapW = cols - sideW - 1
+	}
 	if mapW < 10 {
 		mapW = 10
 	}
@@ -178,6 +322,8 @@ func (a *App) ComputeLayout(cols, rows int) {
 	if a.SelectedTile < 0 && len(a.Tiles) > 0 {
 		a.SelectedTile = 0
 	}
+
+	a.refreshSidebar()
 }
 
 // RenderFrame renders a single frame to the screen buffer.
@@ -187,7 +333,11 @@ func (a *App) RenderFrame(cols, rows int) []byte {
 
 	// Header Line 0: Breadcrumb trail
 	trail := a.buildTrail()
-	sb.DrawString(1, 0, "treedisk", HighlightBorder, Reset, true)
+	titleFg := HighlightBorder
+	if a.Monochrome {
+		titleFg = FgBrightWhite + Bold
+	}
+	sb.DrawString(1, 0, "treedisk", titleFg, Reset, true)
 	sb.DrawString(10, 0, "· "+trail, FgBrightWhite, Reset, false)
 
 	// Header Line 1: Summary metrics
@@ -201,14 +351,28 @@ func (a *App) RenderFrame(cols, rows int) []byte {
 	if a.FilterResult != nil {
 		summary += fmt.Sprintf(" | Filter: %q (%d matches)", a.SearchQuery, a.FilterResult.Count)
 	}
-	sb.DrawString(1, 1, summary, FgYellow, Reset, false)
+	summaryFg := FgYellow
+	if a.Monochrome {
+		summaryFg = FgBrightWhite
+	}
+	sb.DrawString(1, 1, summary, summaryFg, Reset, false)
 
-	// Draw treemap grid
+	// Treemap area calculation
 	mapOffsetY := 2
 	mapH := rows - 6
+	mapW := cols
+	if a.SidebarOpen && cols >= 80 {
+		sideW := cols * 30 / 100
+		if sideW < 26 {
+			sideW = 26
+		} else if sideW > 38 {
+			sideW = 38
+		}
+		mapW = cols - sideW - 1
+	}
 
 	for idx, tile := range a.Tiles {
-		isSelected := (idx == a.SelectedTile)
+		isSelected := (idx == a.SelectedTile && a.Focus == FocusTreemap)
 		box := tile.Box
 
 		x0 := box.X
@@ -221,8 +385,8 @@ func (a *App) RenderFrame(cols, rows int) []byte {
 		if x0 < 0 {
 			x0 = 0
 		}
-		if x1 > cols {
-			x1 = cols
+		if x1 > mapW {
+			x1 = mapW
 		}
 		if y0 < mapOffsetY {
 			y0 = mapOffsetY
@@ -255,17 +419,20 @@ func (a *App) RenderFrame(cols, rows int) []byte {
 			reclaim = targetNode.Reclaim
 		}
 
-		fg := CategoryColor(cat)
-		bg := CategoryBg(cat)
+		fg := CategoryColor(cat, a.Monochrome)
+		bg := CategoryBg(cat, a.Monochrome)
+		borderFg := BorderColor(isSelected, a.Monochrome)
 		if isSelected {
-			bg = HighlightBg
+			if a.Monochrome {
+				bg = BgBlack
+			} else {
+				bg = HighlightBg
+			}
 		}
 
 		_, isMarked := a.Marks[targetPath]
 
-		// Structural Constraint 2:
-		// If a box calculates to a width smaller than (len(label) + 2) or height < 2 rows,
-		// omit internal borders and labels entirely to prevent text clipping.
+		// Minimum dimensions check
 		if !tile.ShowBorderAndText {
 			for y := y0; y < y1; y++ {
 				for x := x0; x < x1; x++ {
@@ -274,7 +441,7 @@ func (a *App) RenderFrame(cols, rows int) []byte {
 						ch = '░'
 					}
 					if isSelected {
-						sb.Set(x, y, ch, HighlightBorder, HighlightBg, true)
+						sb.Set(x, y, ch, borderFg, bg, true)
 					} else {
 						sb.Set(x, y, ch, fg, bg, false)
 					}
@@ -303,7 +470,7 @@ func (a *App) RenderFrame(cols, rows int) []byte {
 						} else {
 							ch = '║'
 						}
-						sb.Set(x, y, ch, HighlightBorder, bg, true)
+						sb.Set(x, y, ch, borderFg, bg, true)
 					} else {
 						if x == x0 && y == y0 {
 							ch = '┌'
@@ -318,7 +485,7 @@ func (a *App) RenderFrame(cols, rows int) []byte {
 						} else {
 							ch = '│'
 						}
-						sb.Set(x, y, ch, fg, bg, false)
+						sb.Set(x, y, ch, borderFg, bg, false)
 					}
 				} else {
 					ch := ' '
@@ -339,13 +506,14 @@ func (a *App) RenderFrame(cols, rows int) []byte {
 			title = "[X] " + title
 		}
 
-		titleFg := FgBrightWhite
+		titleColor := FgBrightWhite
 		if isMarked {
-			titleFg = FgBrightRed
+			titleColor = FgBrightRed
+		} else if isSelected && a.Monochrome {
+			titleColor = FgBrightWhite + Bold
 		}
 
-		// Draw label at row y0+1, col x0+1
-		sb.DrawString(x0+1, y0+1, title, titleFg, bg, isSelected)
+		sb.DrawString(x0+1, y0+1, title, titleColor, bg, isSelected)
 
 		// Size string
 		if (y1-y0) >= 3 && targetNode != nil {
@@ -356,9 +524,24 @@ func (a *App) RenderFrame(cols, rows int) []byte {
 				sizeStr = size.HumanBytesShort(targetNode.Bytes)
 			}
 			if utf8.RuneCountInString(sizeStr) <= interiorW {
-				sb.DrawString(x0+1, y0+2, sizeStr, FgBrightYellow, bg, false)
+				sizeFg := FgBrightYellow
+				if a.Monochrome {
+					sizeFg = FgGray
+				}
+				sb.DrawString(x0+1, y0+2, sizeStr, sizeFg, bg, false)
 			}
 		}
+	}
+
+	// Render Sidebar if active
+	if a.SidebarOpen && cols >= 80 {
+		sideW := cols * 30 / 100
+		if sideW < 26 {
+			sideW = 26
+		} else if sideW > 38 {
+			sideW = 38
+		}
+		a.renderSidebar(sb, mapW+1, 2, sideW, mapH)
 	}
 
 	// Bottom Footer
@@ -374,7 +557,6 @@ func (a *App) RenderFrame(cols, rows int) []byte {
 
 		volBar = fmt.Sprintf("Volume: [%s] %s free / %s (%.0f%% used)", bar, freeStr, totStr, usedPct)
 
-		// If marked items exist, show projected recovery
 		var markedBytes uint64
 		for _, m := range a.Marks {
 			markedBytes += m.Bytes
@@ -384,9 +566,13 @@ func (a *App) RenderFrame(cols, rows int) []byte {
 			volBar += fmt.Sprintf(" -> %s free after marked", size.HumanBytes(proj.Available))
 		}
 	}
-	sb.DrawString(1, footY, volBar, FgBrightCyan, Reset, false)
+	volFg := FgBrightCyan
+	if a.Monochrome {
+		volFg = FgBrightWhite
+	}
+	sb.DrawString(1, footY, volBar, volFg, Reset, false)
 
-	// Footer 2: Current selection detail
+	// Footer 2: Current selection detail & rich stats
 	selDetail := "Selected: none"
 	if a.SelectedTile >= 0 && a.SelectedTile < len(a.Tiles) {
 		t := a.Tiles[a.SelectedTile]
@@ -396,13 +582,18 @@ func (a *App) RenderFrame(cols, rows int) []byte {
 			n := a.CurrentNode.Resolve(t.Crumbs)
 			if n != nil {
 				p := a.buildPath(t.Crumbs)
-				selDetail = fmt.Sprintf("Selected: %s | %s | %s files | %s",
-					p, size.HumanBytes(n.Bytes), size.HumanCount(n.Files), n.Category.Label())
+				pctParent := 0.0
+				if a.CurrentNode.Bytes > 0 {
+					pctParent = (float64(n.Bytes) / float64(a.CurrentNode.Bytes)) * 100.0
+				}
+				selDetail = fmt.Sprintf("Selected: %s | %s | %s files (%s dirs) | %s | %.1f%%",
+					p, size.HumanBytes(n.Bytes),
+					size.HumanCount(n.Files), size.HumanCount(n.Dirs), n.Category.Label(), pctParent)
 				if n.Reclaim != tree.ReclaimNone {
 					selDetail += fmt.Sprintf(" [%s]", n.Reclaim.Label())
 				}
 				if _, ok := a.Marks[p]; ok {
-					selDetail += " [MARKED FOR DELETION]"
+					selDetail += " [MARKED]"
 				}
 			}
 		}
@@ -415,9 +606,12 @@ func (a *App) RenderFrame(cols, rows int) []byte {
 	} else if a.StatusMsg != "" {
 		sb.DrawString(1, footY+2, a.StatusMsg, FgBrightRed, Reset, true)
 	} else {
-		// Key guide
-		keys := "[Space] Mark  [Enter] Zoom  [Backspace] Up  [c] Review  [m] Metric  [/] Filter  [?] Help  [q] Quit"
-		sb.DrawString(1, footY+2, keys, FgYellow, Reset, false)
+		keys := "[Space] Mark  [Enter] Open  [Tab] Pane  [s] Sidebar  [t] Mono  [m] Metric  [/] Filter  [?] Help"
+		keysFg := FgYellow
+		if a.Monochrome {
+			keysFg = FgGray
+		}
+		sb.DrawString(1, footY+2, keys, keysFg, Reset, false)
 	}
 
 	// Render modal screens if active
@@ -428,6 +622,132 @@ func (a *App) RenderFrame(cols, rows int) []byte {
 	}
 
 	return sb.Render()
+}
+
+func (a *App) renderSidebar(sb *ScreenBuffer, startX, startY, width, height int) {
+	divX := startX - 1
+	dividerCh := '│'
+	divFg := BorderColor(false, a.Monochrome)
+	if a.Focus == FocusSidebar {
+		dividerCh = '║'
+		divFg = BorderColor(true, a.Monochrome)
+	}
+	for y := startY; y < startY+height && y < sb.Height; y++ {
+		sb.Set(divX, y, dividerCh, divFg, Reset, false)
+	}
+
+	header := fmt.Sprintf("Contents · [%s]", a.SidebarSort.Label())
+	headerFg := FgBrightWhite
+	if a.Focus == FocusSidebar {
+		if a.Monochrome {
+			headerFg = FgBrightWhite + Bold
+		} else {
+			headerFg = HighlightBorder
+		}
+	}
+	sb.DrawString(startX+1, startY, header, headerFg, Reset, true)
+
+	colHeader := fmt.Sprintf("%-14s %7s %4s", "Name", a.Metric.Label(), "%")
+	if width < 30 {
+		colHeader = fmt.Sprintf("%-10s %6s", "Name", a.Metric.Label())
+	}
+	sb.DrawString(startX+1, startY+1, colHeader, FgGray, Reset, false)
+	for x := startX; x < startX+width && x < sb.Width; x++ {
+		sb.Set(x, startY+2, '─', FgGray, Reset, false)
+	}
+
+	listY := startY + 3
+	visibleRows := height - 4
+	if visibleRows < 1 {
+		return
+	}
+
+	if a.SidebarSelected < a.SidebarScroll {
+		a.SidebarScroll = a.SidebarSelected
+	}
+	if a.SidebarSelected >= a.SidebarScroll+visibleRows {
+		a.SidebarScroll = a.SidebarSelected - visibleRows + 1
+	}
+
+	totalBytes := a.CurrentNode.Bytes
+	if totalBytes == 0 {
+		totalBytes = 1
+	}
+
+	for i := 0; i < visibleRows; i++ {
+		idx := a.SidebarScroll + i
+		if idx >= len(a.SidebarItems) {
+			break
+		}
+		item := a.SidebarItems[idx]
+		y := listY + i
+		if y >= sb.Height {
+			break
+		}
+		isSelected := (idx == a.SidebarSelected)
+
+		p := filepath.Join(a.buildPath(nil), item.Name)
+		_, isMarked := a.Marks[p]
+		markPrefix := "  "
+		if isMarked {
+			markPrefix = "[X]"
+		} else if isSelected && a.Focus == FocusSidebar {
+			markPrefix = "▶ "
+		}
+
+		name := item.Name
+		if item.IsDir() {
+			name += "/"
+		}
+
+		availNameW := width - 16
+		if availNameW < 8 {
+			availNameW = 8
+		}
+		if len(name) > availNameW {
+			name = name[:availNameW-1] + "…"
+		}
+
+		sizeStr := size.HumanBytesShort(item.Bytes)
+		if a.Metric == tree.Files {
+			sizeStr = size.HumanCount(item.Files)
+		}
+		pct := (float64(item.Bytes) / float64(totalBytes)) * 100.0
+		pctStr := fmt.Sprintf("%3.0f%%", pct)
+
+		rowStr := fmt.Sprintf("%s %-*s %6s %4s", markPrefix, availNameW, name, sizeStr, pctStr)
+		if width < 30 {
+			rowStr = fmt.Sprintf("%s %-*s %6s", markPrefix, availNameW, name, sizeStr)
+		}
+
+		rowFg := FgBrightWhite
+		rowBg := Reset
+		if isMarked {
+			rowFg = FgBrightRed
+		} else if a.Monochrome {
+			if isSelected && a.Focus == FocusSidebar {
+				rowFg = FgBlack
+				rowBg = BgWhite
+			} else {
+				rowFg = FgBrightWhite
+			}
+		} else {
+			if isSelected && a.Focus == FocusSidebar {
+				rowFg = FgBrightWhite
+				rowBg = HighlightBg
+			} else {
+				rowFg = CategoryColor(item.Category, false)
+			}
+		}
+
+		sb.DrawString(startX+1, y, rowStr, rowFg, rowBg, isSelected && a.Focus == FocusSidebar)
+	}
+
+	hint := "Tab:Focus  S/N/C:Sort"
+	if a.Focus == FocusSidebar {
+		hint = "Enter:Open  Space:Mark"
+	}
+	sb.DrawString(startX+1, startY+height-1, hint, FgGray, Reset, false)
 }
 
 func (a *App) drawReviewModal(sb *ScreenBuffer, cols, rows int) {
@@ -506,8 +826,12 @@ func (a *App) drawHelpModal(sb *ScreenBuffer, cols, rows int) {
 	sb.DrawString(startX+2, startY+1, "treedisk Help & Keybindings", HighlightBorder, BgBlack, true)
 
 	helpLines := []string{
-		"Arrows / h j k l : Navigate between tiles",
-		"Space            : Mark / unmark selected tile for removal",
+		"Arrows / h j k l : Navigate in focused pane",
+		"Tab              : Switch focus (Treemap / Contents Sidebar)",
+		"s                : Toggle Contents Sidebar",
+		"S / N / C / R    : Sort sidebar (Size / Name / Count / Reclaim)",
+		"t                : Toggle Minimal Monochrome theme",
+		"Space            : Mark / unmark selected file or folder",
 		"Enter            : Zoom into directory",
 		"Backspace / u    : Go up to parent directory",
 		"c                : Review marked list and commit deletion",
@@ -619,21 +943,49 @@ func (a *App) HandleEvent(ev Event) {
 	switch ev.Type {
 	case KeyEsc:
 		a.Running = false
+	case KeyTab:
+		if a.Focus == FocusTreemap {
+			a.Focus = FocusSidebar
+		} else {
+			a.Focus = FocusTreemap
+		}
 	case KeyLeft:
-		if a.SelectedTile > 0 {
+		if a.Focus == FocusSidebar {
+			a.Focus = FocusTreemap
+		} else if a.SelectedTile > 0 {
 			a.SelectedTile--
+			a.syncSidebarWithTile()
 		}
 	case KeyRight:
-		if a.SelectedTile < len(a.Tiles)-1 {
+		if a.Focus == FocusTreemap && a.SidebarOpen {
+			a.Focus = FocusSidebar
+		} else if a.SelectedTile < len(a.Tiles)-1 {
 			a.SelectedTile++
+			a.syncSidebarWithTile()
 		}
 	case KeyUp:
-		if a.SelectedTile > 0 {
-			a.SelectedTile--
+		if a.Focus == FocusSidebar {
+			if a.SidebarSelected > 0 {
+				a.SidebarSelected--
+				a.syncTileWithSidebar()
+			}
+		} else {
+			if a.SelectedTile > 0 {
+				a.SelectedTile--
+				a.syncSidebarWithTile()
+			}
 		}
 	case KeyDown:
-		if a.SelectedTile < len(a.Tiles)-1 {
-			a.SelectedTile++
+		if a.Focus == FocusSidebar {
+			if a.SidebarSelected < len(a.SidebarItems)-1 {
+				a.SidebarSelected++
+				a.syncTileWithSidebar()
+			}
+		} else {
+			if a.SelectedTile < len(a.Tiles)-1 {
+				a.SelectedTile++
+				a.syncSidebarWithTile()
+			}
 		}
 	case KeyEnter:
 		a.zoomIn()
@@ -645,21 +997,65 @@ func (a *App) HandleEvent(ev Event) {
 		switch ev.Char {
 		case 'q', 'Q':
 			a.Running = false
+		case '\t':
+			if a.Focus == FocusTreemap {
+				a.Focus = FocusSidebar
+			} else {
+				a.Focus = FocusTreemap
+			}
+		case 's':
+			a.SidebarOpen = !a.SidebarOpen
+		case 't', 'T':
+			a.Monochrome = !a.Monochrome
+		case 'S':
+			a.SidebarSort = SortSize
+			a.refreshSidebar()
+		case 'N':
+			a.SidebarSort = SortName
+			a.refreshSidebar()
+		case 'F':
+			a.SidebarSort = SortCount
+			a.refreshSidebar()
+		case 'R':
+			a.SidebarSort = SortReclaim
+			a.refreshSidebar()
 		case 'h':
-			if a.SelectedTile > 0 {
+			if a.Focus == FocusSidebar {
+				a.Focus = FocusTreemap
+			} else if a.SelectedTile > 0 {
 				a.SelectedTile--
+				a.syncSidebarWithTile()
 			}
 		case 'l':
-			if a.SelectedTile < len(a.Tiles)-1 {
+			if a.Focus == FocusTreemap && a.SidebarOpen {
+				a.Focus = FocusSidebar
+			} else if a.SelectedTile < len(a.Tiles)-1 {
 				a.SelectedTile++
+				a.syncSidebarWithTile()
 			}
 		case 'k':
-			if a.SelectedTile > 0 {
-				a.SelectedTile--
+			if a.Focus == FocusSidebar {
+				if a.SidebarSelected > 0 {
+					a.SidebarSelected--
+					a.syncTileWithSidebar()
+				}
+			} else {
+				if a.SelectedTile > 0 {
+					a.SelectedTile--
+					a.syncSidebarWithTile()
+				}
 			}
 		case 'j':
-			if a.SelectedTile < len(a.Tiles)-1 {
-				a.SelectedTile++
+			if a.Focus == FocusSidebar {
+				if a.SidebarSelected < len(a.SidebarItems)-1 {
+					a.SidebarSelected++
+					a.syncTileWithSidebar()
+				}
+			} else {
+				if a.SelectedTile < len(a.Tiles)-1 {
+					a.SelectedTile++
+					a.syncSidebarWithTile()
+				}
 			}
 		case 'u':
 			a.zoomOut()
@@ -668,6 +1064,7 @@ func (a *App) HandleEvent(ev Event) {
 		case 'm', 'M':
 			a.Metric = a.Metric.Toggled()
 			tree.Aggregate(a.RootNode, a.Metric)
+			a.refreshSidebar()
 		case '[':
 			if a.Depth > 1 {
 				a.Depth--
@@ -686,6 +1083,26 @@ func (a *App) HandleEvent(ev Event) {
 }
 
 func (a *App) zoomIn() {
+	if a.Focus == FocusSidebar {
+		if a.SidebarSelected >= 0 && a.SidebarSelected < len(a.SidebarItems) {
+			item := a.SidebarItems[a.SidebarSelected]
+			if item.IsDir() && len(item.Children) > 0 {
+				for idx, child := range a.CurrentNode.Children {
+					if child == item {
+						a.Crumbs = append(a.Crumbs, idx)
+						a.CurrentNode = item
+						a.SelectedTile = 0
+						a.SidebarSelected = 0
+						a.SidebarScroll = 0
+						a.refreshSidebar()
+						return
+					}
+				}
+			}
+		}
+		return
+	}
+
 	if a.SelectedTile < 0 || a.SelectedTile >= len(a.Tiles) {
 		return
 	}
@@ -698,6 +1115,9 @@ func (a *App) zoomIn() {
 		a.Crumbs = append(a.Crumbs, t.Crumbs...)
 		a.CurrentNode = targetNode
 		a.SelectedTile = 0
+		a.SidebarSelected = 0
+		a.SidebarScroll = 0
+		a.refreshSidebar()
 	}
 }
 
@@ -712,9 +1132,30 @@ func (a *App) zoomOut() {
 		a.Crumbs = nil
 	}
 	a.SelectedTile = 0
+	a.SidebarSelected = 0
+	a.SidebarScroll = 0
+	a.refreshSidebar()
 }
 
 func (a *App) toggleMark() {
+	if a.Focus == FocusSidebar {
+		if a.SidebarSelected < 0 || a.SidebarSelected >= len(a.SidebarItems) {
+			return
+		}
+		item := a.SidebarItems[a.SidebarSelected]
+		p := filepath.Join(a.buildPath(nil), item.Name)
+		if _, ok := a.Marks[p]; ok {
+			delete(a.Marks, p)
+		} else {
+			a.Marks[p] = removal.Target{
+				Path:  p,
+				Bytes: item.Bytes,
+				IsDir: item.IsDir(),
+			}
+		}
+		return
+	}
+
 	if a.SelectedTile < 0 || a.SelectedTile >= len(a.Tiles) {
 		return
 	}

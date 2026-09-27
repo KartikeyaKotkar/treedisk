@@ -33,6 +33,8 @@ options:
                         also measure other disks, network shares and pseudo
                         filesystems mounted below PATH (off by default)
   -d, --depth N         how many levels to draw at once (1-6, default 3)
+  -m, --mono            minimal monochrome terminal theme
+      --no-sidebar      start with contents sidebar hidden
       --metric files    rank by file count instead of bytes
       --once            render a single frame and exit (benchmark / script mode)
   -h, --help            show this help
@@ -44,6 +46,8 @@ func main() {
 	depth := uint32(3)
 	disk := false
 	once := false
+	mono := false
+	sidebar := true
 
 	args := os.Args[1:]
 	for i := 0; i < len(args); i++ {
@@ -58,6 +62,10 @@ func main() {
 			opts.FollowLinks = true
 		case "-H", "--no-hidden":
 			opts.IncludeHidden = false
+		case "-m", "--mono", "--monochrome":
+			mono = true
+		case "--no-sidebar":
+			sidebar = false
 		case "-x", "--one-filesystem":
 			opts.OneFilesystem = true
 		case "-X", "--cross-filesystems":
@@ -150,6 +158,8 @@ func main() {
 	}
 
 	app := tui.NewApp(cleanRoot, rootNode, opts.Metric, depth)
+	app.Monochrome = mono
+	app.SidebarOpen = sidebar
 
 	// Check if terminal is interactive
 	isTerminal := isatty(int(os.Stdout.Fd()))

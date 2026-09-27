@@ -4,7 +4,7 @@
 
 An ultra-fast interactive terminal disk-usage explorer with squarified treemaps, sortable contents sidebar, and safe space reclaim. Written in pure Go.
 
-*Above: treedisk scanning a project — `.git` objects, `assets`, and `crates` laid out as a squarified treemap with the contents sidebar.*
+*Above: treedisk scanning a project: `.git` objects, `assets`, and `crates` laid out as a squarified treemap with the contents sidebar.*
 
 ```
  treedisk · /home/user/workspace
@@ -27,14 +27,14 @@ An ultra-fast interactive terminal disk-usage explorer with squarified treemaps,
 
 ## Highlights
 
-- **⚡ Blazing Fast**: **~3 ms to first frame** (faster than scriptc's 7 ms, no JS/VM boot overhead).
-- **📦 Zero External Dependencies**: 100% pure Go standard library and direct POSIX termios.
-- **🗺️ Squarified Treemap**: True Bruls, Huizing, van Wijk layout with visual aspect ratio control to maintain near 1:1 container proportions in terminal character grids.
-- **📑 Contents Sidebar**: Responsive side-by-side contents panel with instant sorting by size, name, file count, and reclaimable status.
-- **🚀 Multi-Threaded Scanner**: Concurrent directory traversal with 64M-sharded atomic bitset hardlink deduplication and mount boundary protection.
-- **🎨 Visual Categorization**: 9 semantic data categories (Code, Toolchain, Cache, Build, Git, Media, Documents, etc.) with reclaimable space hatching (`░`).
-- **🛡️ Safe Removal Planner**: Review marked files before deleting. Supports Trash or permanent deletion with parent/child deduplication and system root guards.
-- **🤖 AI Agent Prompts**: Export cleanup instructions directly into a structured prompt for AI coding agents to review and remove safely.
+- **Blazing Fast**: **~3 ms to first frame** (faster than scriptc's 7 ms, no JS/VM boot overhead).
+- **Zero External Dependencies**: 100% pure Go standard library and direct POSIX termios.
+- **Squarified Treemap**: True Bruls, Huizing, van Wijk layout with visual aspect ratio control to maintain near 1:1 container proportions in terminal character grids.
+- **Contents Sidebar**: Responsive side-by-side contents panel with instant sorting by size, name, file count, and reclaimable status.
+- **Multi-Threaded Scanner**: Concurrent directory traversal with 64M-sharded atomic bitset hardlink deduplication and mount boundary protection.
+- **Visual Categorization**: 9 semantic data categories (Code, Toolchain, Cache, Build, Git, Media, Documents, etc.) with reclaimable space hatching (`░`).
+- **Safe Removal Planner**: Review marked files before deleting. Supports Trash or permanent deletion with parent/child deduplication and system root guards.
+- **AI Agent Prompts**: Export cleanup instructions directly into a structured prompt for AI coding agents to review and remove safely.
 
 ---
 
@@ -87,7 +87,7 @@ treedisk --help       # display options and usage
 | `-H, --no-hidden` | Skip dotfiles and dot-directories |
 | `-D, --disk` | Scan the entire volume containing the target directory |
 | `-X, --cross-filesystems` | Cross into other disks, network shares, and pseudo-filesystems |
-| `-d, --depth N` | Maximum treemap hierarchy depth to draw at once (1–6, default: `3`) |
+| `-d, --depth N` | Maximum treemap hierarchy depth to draw at once (1-6, default: `3`) |
 | `--no-sidebar` | Launch with the contents sidebar hidden |
 | `--metric files` | Rank tiles and sidebar by file count instead of byte size |
 | `--once` | Render a single frame and exit immediately |
@@ -106,7 +106,7 @@ treedisk --help       # display options and usage
 | `Enter` | Zoom / drill down into selected directory |
 | `Backspace` / `u` | Go up to parent directory |
 | `s` | Toggle Contents Sidebar on / off |
-| `[` / `]` | Decrease / increase treemap nesting depth (1–6) |
+| `[` / `]` | Decrease / increase treemap nesting depth (1-6) |
 | `m` | Toggle measurement metric (**Size** vs. **Files**) |
 | `/` | Live substring typeahead filter |
 | `?` | Open keybindings help screen |

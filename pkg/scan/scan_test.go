@@ -1,7 +1,7 @@
 package scan
 
 import (
-	"disktree/pkg/tree"
+	"github.com/KartikeyaKotkar/treedisk/pkg/tree"
 	"os"
 	"path/filepath"
 	"testing"

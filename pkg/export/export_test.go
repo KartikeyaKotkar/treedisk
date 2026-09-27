@@ -1,7 +1,7 @@
 package export
 
 import (
-	"disktree/pkg/removal"
+	"github.com/KartikeyaKotkar/treedisk/pkg/removal"
 	"strings"
 	"testing"
 )

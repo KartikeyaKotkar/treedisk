@@ -1,9 +1,9 @@
 package export
 
 import (
-	"disktree/pkg/removal"
-	"disktree/pkg/size"
-	"disktree/pkg/space"
+	"github.com/KartikeyaKotkar/treedisk/pkg/removal"
+	"github.com/KartikeyaKotkar/treedisk/pkg/size"
+	"github.com/KartikeyaKotkar/treedisk/pkg/space"
 	"fmt"
 	"runtime"
 	"strings"
@@ -32,7 +32,7 @@ func AgentPrompt(targets []removal.Target, root string, sp *space.SpaceInfo) str
 	}
 
 	var sb strings.Builder
-	fmt.Fprintf(&sb, "I need to free up disk space on this %s machine. I used disktree to look through %s and picked the directories and files below for deletion, %s in all.\n",
+	fmt.Fprintf(&sb, "I need to free up disk space on this %s machine. I used treedisk to look through %s and picked the directories and files below for deletion, %s in all.\n",
 		runtime.GOOS, root, size.HumanBytes(total))
 
 	if sp != nil && sp.Total > 0 {

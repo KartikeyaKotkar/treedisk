@@ -1,6 +1,6 @@
 package tui
 
-import "disktree/pkg/tree"
+import "github.com/KartikeyaKotkar/treedisk/pkg/tree"
 
 // ANSI Color definitions
 const (

@@ -1,7 +1,7 @@
 package treemap
 
 import (
-	"disktree/pkg/tree"
+	"github.com/KartikeyaKotkar/treedisk/pkg/tree"
 	"math"
 	"sort"
 	"unicode/utf8"

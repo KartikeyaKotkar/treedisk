@@ -1,8 +1,8 @@
 package scan
 
 import (
-	"disktree/pkg/classify"
-	"disktree/pkg/tree"
+	"github.com/KartikeyaKotkar/treedisk/pkg/classify"
+	"github.com/KartikeyaKotkar/treedisk/pkg/tree"
 	"os"
 	"path/filepath"
 	"sync"

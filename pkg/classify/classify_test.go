@@ -1,7 +1,7 @@
 package classify
 
 import (
-	"disktree/pkg/tree"
+	"github.com/KartikeyaKotkar/treedisk/pkg/tree"
 	"testing"
 )
 

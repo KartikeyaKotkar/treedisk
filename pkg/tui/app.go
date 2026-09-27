@@ -2,13 +2,13 @@ package tui
 
 import (
 	"bytes"
-	"disktree/pkg/export"
-	"disktree/pkg/filter"
-	"disktree/pkg/removal"
-	"disktree/pkg/size"
-	"disktree/pkg/space"
-	"disktree/pkg/tree"
-	"disktree/pkg/treemap"
+	"github.com/KartikeyaKotkar/treedisk/pkg/export"
+	"github.com/KartikeyaKotkar/treedisk/pkg/filter"
+	"github.com/KartikeyaKotkar/treedisk/pkg/removal"
+	"github.com/KartikeyaKotkar/treedisk/pkg/size"
+	"github.com/KartikeyaKotkar/treedisk/pkg/space"
+	"github.com/KartikeyaKotkar/treedisk/pkg/tree"
+	"github.com/KartikeyaKotkar/treedisk/pkg/treemap"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -187,7 +187,7 @@ func (a *App) RenderFrame(cols, rows int) []byte {
 
 	// Header Line 0: Breadcrumb trail
 	trail := a.buildTrail()
-	sb.DrawString(1, 0, "disktree", HighlightBorder, Reset, true)
+	sb.DrawString(1, 0, "treedisk", HighlightBorder, Reset, true)
 	sb.DrawString(10, 0, "· "+trail, FgBrightWhite, Reset, false)
 
 	// Header Line 1: Summary metrics
@@ -503,7 +503,7 @@ func (a *App) drawHelpModal(sb *ScreenBuffer, cols, rows int) {
 		}
 	}
 
-	sb.DrawString(startX+2, startY+1, "disktree Help & Keybindings", HighlightBorder, BgBlack, true)
+	sb.DrawString(startX+2, startY+1, "treedisk Help & Keybindings", HighlightBorder, BgBlack, true)
 
 	helpLines := []string{
 		"Arrows / h j k l : Navigate between tiles",
@@ -515,7 +515,7 @@ func (a *App) drawHelpModal(sb *ScreenBuffer, cols, rows int) {
 		"[ and ]          : Decrease / increase drawing depth (1-6)",
 		"/                : Search / filter by name",
 		"?                : Open this help screen",
-		"q / Esc          : Exit disktree",
+		"q / Esc          : Exit treedisk",
 	}
 
 	for i, l := range helpLines {
@@ -776,7 +776,7 @@ func (a *App) exportPrompt() {
 		targets = append(targets, m)
 	}
 	prompt := export.AgentPrompt(targets, a.RootPath, &a.SpaceInfo)
-	outPath := filepath.Join(os.TempDir(), "disktree_agent_prompt.txt")
+	outPath := filepath.Join(os.TempDir(), "treedisk_agent_prompt.txt")
 	if err := os.WriteFile(outPath, []byte(prompt), 0644); err == nil {
 		a.StatusMsg = "Prompt saved to " + outPath
 	} else {

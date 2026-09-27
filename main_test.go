@@ -12,7 +12,7 @@ func TestMainHelp(t *testing.T) {
 	if err != nil {
 		t.Fatalf("go run . --help failed: %v", err)
 	}
-	if !strings.Contains(string(out), "disktree — a treemap of what is using your disk") {
+	if !strings.Contains(string(out), "treedisk — a treemap of what is using your disk") {
 		t.Errorf("help output missing usage string")
 	}
 }
@@ -23,7 +23,7 @@ func TestMainOnce(t *testing.T) {
 	if err != nil {
 		t.Fatalf("go run . --once pkg failed: %v\nOutput: %s", err, string(out))
 	}
-	if !strings.Contains(string(out), "disktree") {
-		t.Errorf("treemap output missing disktree header")
+	if !strings.Contains(string(out), "treedisk") {
+		t.Errorf("treemap output missing treedisk header")
 	}
 }

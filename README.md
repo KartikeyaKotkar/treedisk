@@ -1,28 +1,45 @@
-# disktree (Go)
+# treedisk
 
 Find what is filling a disk, mark what should go, and remove it — with the
 volume's free space in view the whole time.
 
-disktree is a high-performance terminal and CLI treemap. It scans your home directory by default,
+treedisk is a high-performance terminal and CLI treemap written in Go. It scans your home directory by default,
 draws every directory as a nested squarified mosaic sized by what it really costs on disk,
 and lets you walk into it with the keyboard. Mark as much as you like; nothing happens until you review the list and commit, and the permanent path always asks first.
 
-High-performance Go rewrite:
-- **~3.45 ms** to first frame (faster than scriptc's 7 ms)
+High-performance Go implementation:
+- **~3.45 ms** to first frame (beating scriptc's 7 ms)
 - Zero external runtime dependencies (pure Go + POSIX termios)
 - Multi-threaded disk scanning with hardlink deduplication
 - Squarified treemap layout algorithm (Bruls, Huizing, van Wijk)
 - Data categorization & reclaimable space detection
 - Interactive TUI mode and batch `--once` CLI mode
 
-## Build and Install
+## Installation
 
-Prerequisites: Go 1.24+
+### Via `go install` (Recommended)
 
 ```sh
-make build        # builds bin/disktree
-make test         # runs all package unit tests
-make install      # installs to ~/.local/bin/disktree
+go install github.com/KartikeyaKotkar/treedisk@latest
+```
+
+Ensure `$(go env GOPATH)/bin` (typically `~/go/bin`) is in your `$PATH`:
+```sh
+export PATH="$PATH:$(go env GOPATH)/bin"
+```
+
+### From Source
+
+```sh
+git clone https://github.com/KartikeyaKotkar/treedisk.git
+cd treedisk
+
+# Install directly to GOBIN
+go install .
+
+# Or build local binary
+make build       # creates bin/treedisk
+make install     # installs to ~/.local/bin/treedisk
 ```
 
 Download `disktree-*-aarch64-macos.zip` (`x86_64-macos` for an Intel Mac)

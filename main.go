@@ -1,10 +1,10 @@
 package main
 
 import (
-	"disktree/pkg/scan"
-	"disktree/pkg/space"
-	"disktree/pkg/tree"
-	"disktree/pkg/tui"
+	"github.com/KartikeyaKotkar/treedisk/pkg/scan"
+	"github.com/KartikeyaKotkar/treedisk/pkg/space"
+	"github.com/KartikeyaKotkar/treedisk/pkg/tree"
+	"github.com/KartikeyaKotkar/treedisk/pkg/tui"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -14,9 +14,9 @@ import (
 	"unsafe"
 )
 
-const usage = `disktree — a treemap of what is using your disk
+const usage = `treedisk — a treemap of what is using your disk
 
-usage: disktree [OPTIONS] [PATH]
+usage: treedisk [OPTIONS] [PATH]
 
 arguments:
   PATH              directory to scan (default: the home directory)

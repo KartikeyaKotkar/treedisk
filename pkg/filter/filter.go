@@ -1,7 +1,7 @@
 package filter
 
 import (
-	"disktree/pkg/tree"
+	"github.com/KartikeyaKotkar/treedisk/pkg/tree"
 	"fmt"
 	"strings"
 )

@@ -1,7 +1,7 @@
 package tui
 
 import (
-	"disktree/pkg/tree"
+	"github.com/KartikeyaKotkar/treedisk/pkg/tree"
 	"strings"
 	"testing"
 )
@@ -18,7 +18,7 @@ func TestAppRenderFrame(t *testing.T) {
 	app := NewApp("/tmp/testroot", root, tree.Bytes, 3)
 	output := string(app.RenderFrame(80, 24))
 
-	if !strings.Contains(output, "disktree") {
+	if !strings.Contains(output, "treedisk") {
 		t.Errorf("rendered frame missing app title")
 	}
 	if !strings.Contains(output, "file1.go") {

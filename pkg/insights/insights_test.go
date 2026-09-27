@@ -1,7 +1,7 @@
 package insights
 
 import (
-	"disktree/pkg/tree"
+	"github.com/KartikeyaKotkar/treedisk/pkg/tree"
 	"testing"
 )
 
